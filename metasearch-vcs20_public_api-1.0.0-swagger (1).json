@@ -1,0 +1,514 @@
+{
+  "openapi" : "3.0.0",
+  "info" : {
+    "description" : "# Описание\n\nAPI интерфейс используется для интеграции возможностей сервиса VCS 2.0 во внешние приложения - создавать, изменять, просматривать и удалять конференции.\n\nAPI предназначен для разработчиков.\n\nAPI сервиса работает по протоколу HTTP и представляет собой набор методов, с помощью которых совершаются запросы и возвращаются ответы для каждой операции. Все ответы приходят в виде JSON структур.\n\n# Подключение к API\n\nДля подключения к API необходимо обратиться по адресу [ IVTomarov1@sberbank.ru ], указав в свободной форме следующие данные:\n  - Название вашего приложения\n  - Описание приложения\n  - Список контактов для связи\n\nПосле регистрации приложения Вам будет предоставлен авторизационный токен.\n\n# Требования\n\nЗапросы в API выполняются на http://server_api_address/api/public/*\n\nВ каждый запрос должны передаваться:\n  - авторизационный токен (заголовок 'Authorization', тип токена `Bearer`)\n  - домен пользователя, от имени которого производится операция (заголовок 'Vcs-Domain')\n  - логин пользователя, от имени которого производится операция (заголовок 'Vcs-Login')\n  \nПринятый формат передачи/получения дат: `YYYY-MM-DD hh:mm:ss` в часовом поясе МСК +03:00.\n\n# Создание конференции\n\n*Конференция* - главная сущность API VCS 2.0. Чтобы ее создать, вам понадобится номер виртуальной комнаты.\n\n*Виртуальная комната* - любая конференция должна создаваться в виртуальной комнате. Каждая комната имеет номер, например `877012345`. Номер используется для подключения участников к конференции. У каждого пользователя может быть 1 **личная** комната, а также несколько **групповых**. Список доступных комнат можно получить, воспользовавшись методом `/virtual-room`.\n\nТакже для создания конференции вам нужно передать:\n- время старта конференции\n- окончания конференции\n- название конференции\n\nОтправьте запрос и передайте в нем данные для создания конференции, авторизационные данные приложения и домен/логин пользователя. В теле ответа вы получите созданный объект конференции.\n\nТеперь можно просматривать/изменять/удалить созданную конференцию, воспользовавшись идентификатором конференции в соответствующем методе.\n",
+    "version" : "1.0.0",
+    "title" : "VCS 2.0 Public API",
+    "contact" : {
+      "email" : "tomaroviv@gmail.com"
+    }
+  },
+  "servers" : [ {
+    "url" : "vks20.sberbank.ru"
+  } ],
+  "tags" : [ {
+    "name" : "Public",
+    "description" : "Публичный API"
+  } ],
+  "paths" : {
+    "/virtual-room" : {
+      "get" : {
+        "tags" : [ "Public" ],
+        "summary" : "Получить список виртуальных комнат",
+        "description" : "Возвращает список доступных виртуальных комнат (в т.ч. групповых). Если у пользователя нет ни одной доступной комнаты, то она будет создана. Любую комнату из списка можно использовать для бронирования конференций. Обычно при создании конференции используется личная комната (owner->type = 'user').",
+        "responses" : {
+          "200" : {
+            "description" : "VirtualRoom list",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/VirtualRoomWithOwnerAndInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vcs" : {
+      "get" : {
+        "tags" : [ "Public" ],
+        "summary" : "Получить список конференций",
+        "description" : "Получить список конференций пользователя, начинающихся в текущий день и позднее. Метод использует пагинацию.",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "schema" : {
+            "type" : "integer"
+          },
+          "description" : "При ограничениее количества результатов указывает, какую страницу данных возвращать."
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "schema" : {
+            "type" : "integer"
+          },
+          "description" : "Ограничение количества записей в возвращаемом результате запроса, даже если общее количество резальтатов больше. Диапазон допустимых значений - от 1 до 500."
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Vcs list",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "vcses" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/Vcs"
+                      }
+                    },
+                    "current_page" : {
+                      "type" : "integer",
+                      "example" : 1
+                    },
+                    "page_size" : {
+                      "type" : "integer",
+                      "example" : 100
+                    },
+                    "total_size" : {
+                      "type" : "string",
+                      "example" : "3103"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "Public" ],
+        "summary" : "Добавить конференцию",
+        "description" : "Добавляет конференцию.",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "required" : [ "start_at", "end_at", "title", "virtual_room_id" ],
+                "properties" : {
+                  "start_at" : {
+                    "type" : "string",
+                    "example" : "2019-12-31 12:00:00",
+                    "description" : "Время начала конференции. Значение должно быть кратно 15 минутам. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00. Время старта конференции должно быть больше как минимум на 3 минуты больше текущего времени. Длительность интервала между текущим временем и временем старта конференции должна быть не менее 3 минут, но не более 30 суток."
+                  },
+                  "end_at" : {
+                    "type" : "string",
+                    "example" : "2019-12-31 13:00:00",
+                    "description" : "Время окончания конференции. Значение должно быть кратно 15 минутам. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00. Минимальная продолжительность конференции 15 минут, максимальная - 14 часов."
+                  },
+                  "title" : {
+                    "type" : "string",
+                    "example" : "Some VCS title",
+                    "description" : "Название конференции (до 255 символов)"
+                  },
+                  "virtual_room_id" : {
+                    "type" : "integer",
+                    "example" : 123,
+                    "description" : "Идентификатор виртуальной комнаты. Список доступных виртуальных комнат можно получить, воспользовавшись методом `/virtual-room`"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Vcs created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Vcs"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/400Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vcs/{id}" : {
+      "get" : {
+        "tags" : [ "Public" ],
+        "summary" : "Получить данные конференции",
+        "description" : "Возвращает информацию о конкретной конференции. Владельцем конференции должен быть текущий пользователь, либо группа, членом которой является текущий пользователь. В противном случае вернется ответ `403 Access Denied`.",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "description" : "Vcs Identifier",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Vcs",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Vcs"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Vcs not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/404Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "Public" ],
+        "summary" : "Обновить данные конференции",
+        "description" : "Обновляет данные конференции. Позволяет передать только часть параметров. Например, обновить только время старта. В этом случае остальные параметры останутся неизменными. Владельцем конференции должен быть текущий пользователь, либо группа, членом которой является текущий пользователь. В противном случае вернется ответ `403 Access Denied`.",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "description" : "Vcs Identifier",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "start_at" : {
+                    "type" : "string",
+                    "example" : "2019-12-31 12:00:00",
+                    "description" : "Время начала конференции. Значение должно быть кратно 15 минутам. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00. Время старта конференции должно быть больше как минимум на 3 минуты больше текущего времени. Длительность интервала между текущим временем и временем старта конференции должна быть не менее 3 минут, но не более 30 суток."
+                  },
+                  "end_at" : {
+                    "type" : "string",
+                    "example" : "2019-12-31 13:00:00",
+                    "description" : "Время окончания конференции. Значение должно быть кратно 15 минутам. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00. Минимальная продолжительность конференции 15 минут, максимальная - 14 часов."
+                  },
+                  "title" : {
+                    "type" : "string",
+                    "example" : "Some VCS title",
+                    "description" : "Название конференции (до 255 символов)"
+                  },
+                  "virtual_room_id" : {
+                    "type" : "integer",
+                    "example" : 123,
+                    "description" : "Идентификатор виртуальной комнаты. Список доступных виртуальных комнат можно получить, воспользовавшись методом `/virtual-room`"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Vcs updated",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Vcs"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "No permissions",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/403Error"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Vcs not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/404Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "Public" ],
+        "summary" : "Удалить конференцию",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "description" : "Vcs Identifier",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Vcs deleted"
+          },
+          "403" : {
+            "description" : "No permissions",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/403Error"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Vcs not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/404Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "Vcs" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "example" : 123,
+            "description" : "Идентификатор конференции"
+          },
+          "title" : {
+            "type" : "string",
+            "example" : "Some title",
+            "description" : "Название конференции"
+          },
+          "created_at" : {
+            "type" : "string",
+            "example" : "2019-12-31 11:00:00",
+            "description" : "Время создания конференции. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00"
+          },
+          "updated_at" : {
+            "type" : "string",
+            "example" : "2019-12-31 11:00:00",
+            "description" : "Время последнего обновления конференции. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00"
+          },
+          "start_at" : {
+            "type" : "string",
+            "example" : "2019-12-31 12:00:00",
+            "description" : "Время начала конференции. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00"
+          },
+          "end_at" : {
+            "type" : "string",
+            "example" : "2019-12-31 13:00:00",
+            "description" : "Время окончания конференции. Указывается в формате YYYY-MM-DD hh:ii:ss, часовом поясе МСК +03:00"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "pending", "served", "completed", "cancelled", "served_with_error", "completed_with_error" ],
+            "description" : "Статус конференции"
+          },
+          "virtual_room" : {
+            "$ref" : "#/components/schemas/VirtualRoom"
+          }
+        }
+      },
+      "VirtualRoom" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "example" : 123,
+            "description" : "Идентификатор виртуальной комнаты"
+          },
+          "identifier" : {
+            "type" : "string",
+            "example" : "12345678",
+            "description" : "Номер виртуальной комнаты"
+          },
+          "location" : {
+            "type" : "string",
+            "enum" : [ "CA", "SRB", "CCHB", "PVB", "UZB", "SZB", "VVB", "URB", "SIB", "BB", "DVB", "NONE" ],
+            "description" : "Подразделение, к которому принадлежит виртуальная комната"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "in_use", "available", "disabled" ],
+            "description" : "Статус виртуальной комнаты"
+          }
+        }
+      },
+      "VirtualRoomWithOwnerAndInfo" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "example" : 123,
+            "description" : "Идентификатор виртуальной комнаты"
+          },
+          "identifier" : {
+            "type" : "string",
+            "example" : "12345678",
+            "description" : "Номер виртуальной комнаты"
+          },
+          "location" : {
+            "type" : "string",
+            "enum" : [ "CA", "SRB", "CCHB", "PVB", "UZB", "SZB", "VVB", "URB", "SIB", "BB", "DVB", "NONE" ],
+            "description" : "Подразделение, к которому принадлежит виртуальная комната"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "in_use", "available", "disabled" ],
+            "description" : "Статус виртуальной комнаты"
+          },
+          "owner" : {
+            "type" : "object",
+            "properties" : {
+              "id" : {
+                "type" : "integer",
+                "example" : 123
+              },
+              "fio" : {
+                "type" : "string",
+                "example" : "John Ivanov"
+              },
+              "name" : {
+                "type" : "string",
+                "example" : "Group name"
+              },
+              "type" : {
+                "type" : "string",
+                "description" : "user - личная комната, group - групповая",
+                "enum" : [ "user", "group" ]
+              }
+            }
+          },
+          "info" : {
+            "type" : "object",
+            "properties" : {
+              "external_identifier" : {
+                "type" : "string",
+                "example" : "812345678"
+              },
+              "current_outer_pincode" : {
+                "type" : "string",
+                "example" : "9999"
+              }
+            }
+          }
+        }
+      },
+      "400Error" : {
+        "required" : [ "error" ],
+        "type" : "object",
+        "properties" : {
+          "error" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "required" : [ "code", "message" ],
+              "properties" : {
+                "code" : {
+                  "type" : "integer",
+                  "example" : 400
+                },
+                "message" : {
+                  "type" : "string",
+                  "example" : "some error description"
+                }
+              }
+            }
+          }
+        }
+      },
+      "403Error" : {
+        "required" : [ "error" ],
+        "type" : "object",
+        "properties" : {
+          "error" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "required" : [ "code", "message" ],
+              "properties" : {
+                "code" : {
+                  "type" : "integer",
+                  "example" : 403
+                },
+                "message" : {
+                  "type" : "string",
+                  "example" : "some error description"
+                }
+              }
+            }
+          }
+        }
+      },
+      "404Error" : {
+        "required" : [ "error" ],
+        "type" : "object",
+        "properties" : {
+          "error" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "required" : [ "code", "message" ],
+              "properties" : {
+                "code" : {
+                  "type" : "integer",
+                  "example" : 404
+                },
+                "message" : {
+                  "type" : "string",
+                  "example" : "some error description"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
